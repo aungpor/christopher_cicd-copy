@@ -1,0 +1,46 @@
+pipeline {
+    environment {
+        ENVIRONMENT = "${params.ENVIRONMENT}"
+        SYSTEM_NAME = "${params.SYSTEM_NAME}"
+        SERVICE_NAME = "${params.SERVICE_NAME}"
+        APPSERVICE_NAME = "${params.APPSERVICE_NAME}"
+        RESOURCE_GROUP = "${params.RESOURCE_GROUP}"
+        REGISTRY = "${params.CONTAINER_REGISTRY}"
+        TAG = "${params.TAG}"
+        VERSION = "${env.BUILD_NUMBER}"
+        IMAGE_NAME = "${SYSTEM_NAME}/${SYSTEM_NAME}-${SERVICE_NAME}" 
+        NAMESPACE = "${SYSTEM_NAME}-${params.ENVIRONMENT}-leng"        
+        
+    }
+    agent any
+    stages {
+        stage('Deploy to webservice ') {
+            steps {
+                withCredentials([azureServicePrincipal('dx-service-principal')]) {
+                    sh 'echo $AZURE_CLIENT_ID  $AZURE_CLIENT_SECRET  $AZURE_TENANT_ID '
+                    sh 'az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET -t $AZURE_TENANT_ID'
+                    sh 'az webapp config container set --name $APPSERVICE_NAME --resource-group $RESOURCE_GROUP --docker-custom-image-name $REGISTRY/$IMAGE_NAME:$TAG --docker-registry-server-url https://$REGISTRY --docker-registry-server-user $AZURE_CLIENT_ID --docker-registry-server-password i68+6Bttlw20h3d87=XYEH/Jj9elUF9C '
+
+            }                    
+            }
+        }
+
+        stage('Restart Webapp ') {
+            steps {
+                    
+                    sh 'az webapp restart --name $APPSERVICE_NAME --resource-group $RESOURCE_GROUP  '
+                    
+            }
+        }
+
+    }
+
+    post {
+        always {
+            emailext body: "Jenkins Build ${currentBuild.currentResult}: Job ${env.JOB_NAME}", 
+                    subject: "${currentBuild.currentResult}: Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}\n More info at: ${env.BUILD_URL}", 
+                    to: "piyachate.le@pt.co.th"
+            cleanWs()
+        }
+    }
+}
